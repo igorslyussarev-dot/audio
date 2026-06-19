@@ -89,7 +89,7 @@ def setup_db():
             "id": 4828, 
             "emp": "Павел Б.", 
             "time": "13:50", 
-            "topic": "Быстая оплата топлива без допродаж", 
+            "topic": "Быстрая оплата топлива без допродаж", 
             "script": "29%", 
             "tone": "Нейтральный", 
             "review": "Критическое несоблюдение стандартов обслуживания. Кассир проигнорировал предложение кофе и выпечки, не озвучил условия промо-акции, повтор заказа не произведен. Задан запрещенный вопрос про чек.",
@@ -159,8 +159,40 @@ def setup_db():
         }
     ]
 
-    # Insert azs dialogs
-    for d in azs_dialogs:
+    def generate_archive_dialogs(base_list):
+        # Sort descending by ID (similar to frontend)
+        sorted_base = sorted(base_list, key=lambda x: x["id"], reverse=True)
+        result = list(sorted_base)
+        
+        last_id = sorted_base[-1]["id"]
+        last_time_str = sorted_base[-1]["time"]
+        hours, minutes = map(int, last_time_str.split(':'))
+        
+        for i in range(24):
+            base = sorted_base[i % len(sorted_base)]
+            last_id -= 1
+            
+            minutes -= 15
+            if minutes < 0:
+                minutes += 60
+                hours -= 1
+                if hours < 0:
+                    hours += 24
+            time_str = f"{hours:02d}:{minutes:02d}"
+            
+            archive_item = dict(base)
+            archive_item["id"] = last_id
+            archive_item["time"] = time_str
+            result.append(archive_item)
+            
+        return result
+
+    # Generate complete sets
+    full_azs = generate_archive_dialogs(azs_dialogs)
+    full_pharmacy = generate_archive_dialogs(pharmacy_dialogs)
+
+    # Insert AZS dialogs
+    for d in full_azs:
         cursor.execute('''
             INSERT OR REPLACE INTO dialogs (id, mode, emp, time, topic, script, tone, review, transcript, lost_profit, audit)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -178,8 +210,8 @@ def setup_db():
             json.dumps(d["audit"], ensure_ascii=False)
         ))
 
-    # Insert pharmacy dialogs
-    for d in pharmacy_dialogs:
+    # Insert Pharmacy dialogs
+    for d in full_pharmacy:
         cursor.execute('''
             INSERT OR REPLACE INTO dialogs (id, mode, emp, time, topic, script, tone, review, transcript, lost_profit, audit)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -198,7 +230,7 @@ def setup_db():
         ))
 
     conn.commit()
-    print(f"Database successfully populated! Total records: {len(azs_dialogs) + len(pharmacy_dialogs)}")
+    print(f"Database successfully populated! Total records: {len(full_azs) + len(full_pharmacy)}")
     conn.close()
 
 if __name__ == "__main__":
