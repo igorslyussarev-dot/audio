@@ -2,11 +2,19 @@ import sqlite3
 import json
 
 def setup_db():
-    # Connect to the SQLite database (creates the file if it doesn't exist)
-    conn = sqlite3.connect('dialogs.db')
+    db_file = 'dialogs.db'
+    
+    conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
 
-    # Create the dialogs table
+    # Enable Foreign Key support in SQLite
+    cursor.execute("PRAGMA foreign_keys = ON;")
+
+    # Drop existing tables to recreate schema cleanly
+    cursor.execute("DROP TABLE IF EXISTS transcripts;")
+    cursor.execute("DROP TABLE IF EXISTS dialogs;")
+
+    # Create normalized tables
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS dialogs (
             id INTEGER PRIMARY KEY,
@@ -17,9 +25,17 @@ def setup_db():
             script TEXT NOT NULL,
             tone TEXT NOT NULL,
             review TEXT NOT NULL,
-            transcript TEXT NOT NULL,
             lost_profit INTEGER NOT NULL,
             audit TEXT NOT NULL
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transcripts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dialog_id INTEGER NOT NULL,
+            content TEXT NOT NULL,
+            FOREIGN KEY (dialog_id) REFERENCES dialogs(id) ON DELETE CASCADE
         )
     ''')
 
@@ -160,7 +176,6 @@ def setup_db():
     ]
 
     def generate_archive_dialogs(base_list):
-        # Sort descending by ID (similar to frontend)
         sorted_base = sorted(base_list, key=lambda x: x["id"], reverse=True)
         result = list(sorted_base)
         
@@ -191,43 +206,37 @@ def setup_db():
     full_azs = generate_archive_dialogs(azs_dialogs)
     full_pharmacy = generate_archive_dialogs(pharmacy_dialogs)
 
-    # Insert AZS dialogs
-    for d in full_azs:
-        cursor.execute('''
-            INSERT OR REPLACE INTO dialogs (id, mode, emp, time, topic, script, tone, review, transcript, lost_profit, audit)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            d["id"],
-            "azs",
-            d["emp"],
-            d["time"],
-            d["topic"],
-            d["script"],
-            d["tone"],
-            d["review"],
-            d["transcript"],
-            d["lost_profit"],
-            json.dumps(d["audit"], ensure_ascii=False)
-        ))
+    # Insert into dialogs and transcripts
+    def insert_records(dataset, mode_name):
+        for d in dataset:
+            # 1. Insert into dialogs table
+            cursor.execute('''
+                INSERT OR REPLACE INTO dialogs (id, mode, emp, time, topic, script, tone, review, lost_profit, audit)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                d["id"],
+                mode_name,
+                d["emp"],
+                d["time"],
+                d["topic"],
+                d["script"],
+                d["tone"],
+                d["review"],
+                d["lost_profit"],
+                json.dumps(d["audit"], ensure_ascii=False)
+            ))
+            
+            # 2. Insert transcript into transcripts table
+            cursor.execute('''
+                INSERT INTO transcripts (dialog_id, content)
+                VALUES (?, ?)
+            ''', (
+                d["id"],
+                d["transcript"]
+            ))
 
-    # Insert Pharmacy dialogs
-    for d in full_pharmacy:
-        cursor.execute('''
-            INSERT OR REPLACE INTO dialogs (id, mode, emp, time, topic, script, tone, review, transcript, lost_profit, audit)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            d["id"],
-            "pharmacy",
-            d["emp"],
-            d["time"],
-            d["topic"],
-            d["script"],
-            d["tone"],
-            d["review"],
-            d["transcript"],
-            d["lost_profit"],
-            json.dumps(d["audit"], ensure_ascii=False)
-        ))
+    insert_records(full_azs, "azs")
+    insert_records(full_pharmacy, "pharmacy")
 
     conn.commit()
     print(f"Database successfully populated! Total records: {len(full_azs) + len(full_pharmacy)}")
