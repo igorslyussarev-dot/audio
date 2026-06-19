@@ -1,3 +1,60 @@
+<?php
+// Connect to SQLite database dialogs.db and fetch dialogs
+$db_dialogs_azs = [];
+$db_dialogs_pharmacy = [];
+
+try {
+    $db_path = __DIR__ . '/dialogs.db';
+    if (file_exists($db_path)) {
+        $db = new PDO('sqlite:' . $db_path);
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        // Fetch azs dialogs
+        $stmt_azs = $db->prepare('
+            SELECT d.id, d.mode, d.emp, d.time, d.topic, d.script, d.tone, d.lost_profit as lostProfit,
+                   (
+                       SELECT json_group_array(json_object(\'speaker\', t.speaker, \'text\', t.text))
+                       FROM transcripts t
+                       WHERE t.dialog_id = d.id
+                       ORDER BY t.sequence_order ASC
+                   ) as transcript
+            FROM dialogs d
+            WHERE d.mode = \'azs\'
+            ORDER BY d.id DESC
+        ');
+        $stmt_azs->execute();
+        $db_dialogs_azs = $stmt_azs->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($db_dialogs_azs as &$d) {
+            $d['id'] = (int)$d['id'];
+            $d['lostProfit'] = (int)$d['lostProfit'];
+            $d['transcript'] = json_decode($d['transcript'], true);
+        }
+        
+        // Fetch pharmacy dialogs
+        $stmt_pharm = $db->prepare('
+            SELECT d.id, d.mode, d.emp, d.time, d.topic, d.script, d.tone, d.lost_profit as lostProfit,
+                   (
+                       SELECT json_group_array(json_object(\'speaker\', t.speaker, \'text\', t.text))
+                       FROM transcripts t
+                       WHERE t.dialog_id = d.id
+                       ORDER BY t.sequence_order ASC
+                   ) as transcript
+            FROM dialogs d
+            WHERE d.mode = \'pharmacy\'
+            ORDER BY d.id DESC
+        ');
+        $stmt_pharm->execute();
+        $db_dialogs_pharmacy = $stmt_pharm->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($db_dialogs_pharmacy as &$d) {
+            $d['id'] = (int)$d['id'];
+            $d['lostProfit'] = (int)$d['lostProfit'];
+            $d['transcript'] = json_decode($d['transcript'], true);
+        }
+    }
+} catch (PDOException $e) {
+    // Keep arrays empty
+}
+?>
 <!DOCTYPE html>
 <html lang="ru">
 
@@ -757,6 +814,10 @@
 
     <script>
         let currentMode = 'azs';
+        const dbDialogsData = {
+            azs: <?php echo json_encode($db_dialogs_azs, JSON_UNESCAPED_UNICODE); ?>,
+            pharmacy: <?php echo json_encode($db_dialogs_pharmacy, JSON_UNESCAPED_UNICODE); ?>
+        };
         const config = {
             azs: {
                 clientName: "PETRO DEMO",
@@ -1414,17 +1475,14 @@
 
             employees.length = 0; employees.push(...c.employees);
             
-            // Fetch dialogs from SQLite database via PHP API
-            try {
-                const response = await fetch(`api.php?mode=${currentMode}`);
-                if (!response.ok) throw new Error('API request failed');
-                const data = await response.json();
+            // Load dialogs directly pre-fetched by PHP
+            const dbDialogs = dbDialogsData[currentMode] || [];
+            if (dbDialogs.length > 0) {
                 dialogs.length = 0;
-                dialogs.push(...data);
-                console.log('Dialogs loaded from DB:', dialogs);
-            } catch (error) {
-                console.error('Failed to load dialogs from DB, using fallback static data:', error);
-                // Fallback to static dialogs if DB fetch fails
+                dialogs.push(...dbDialogs);
+                console.log('Dialogs loaded from preloaded DB data:', dialogs);
+            } else {
+                console.warn('No preloaded DB dialogs, using fallback static data');
                 dialogs.length = 0;
                 dialogs.push(...c.dialogs);
             }

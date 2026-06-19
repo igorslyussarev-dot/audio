@@ -315,7 +315,7 @@
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && isD) {
             e.preventDefault();
             const prefix = window.location.pathname.includes('/en/') ? '../' : '';
-            window.location.href = prefix + 'demo.html';
+            window.location.href = prefix + 'demo.php';
         }
     });
 
