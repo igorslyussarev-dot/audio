@@ -973,14 +973,14 @@
             if (loginLogo) loginLogo.innerText = config[mode].clientName;
         }
 
-        function checkLogin() {
+        async function checkLogin() {
             const pass = document.getElementById('demo-pass').value;
             if (pass === '1234') {
                 const overlay = document.getElementById('login-overlay');
                 overlay.style.opacity = '0';
                 overlay.style.pointerEvents = 'none';
                 overlay.style.transform = 'scale(1.1)';
-                applyConfig();
+                await applyConfig();
                 switchTab('dialogs');
                 renderEmployees(); // Force render employees immediately
                 setTimeout(() => overlay.remove(), 800);
@@ -1375,7 +1375,7 @@
             document.getElementById('geo-label').innerText = "География инцидентов (" + c.stationLabel + ")";
         }
 
-        function applyConfig() {
+        async function applyConfig() {
             const c = config[currentMode];
             const pageTitle = document.getElementById('page-title');
             if (pageTitle) pageTitle.innerText = c.title;
@@ -1413,34 +1413,20 @@
             }
 
             employees.length = 0; employees.push(...c.employees);
-            dialogs.length = 0; 
             
-            // Сортируем исходные диалоги по убыванию ID, чтобы самые свежие были сверху
-            const baseDialogs = [...c.dialogs].sort((a, b) => b.id - a.id);
-            dialogs.push(...baseDialogs);
-            
-            // Генерируем архивные записи с последовательно убывающими ID и временем
-            let lastId = baseDialogs[baseDialogs.length - 1].id;
-            let lastTimeStr = baseDialogs[baseDialogs.length - 1].time;
-            let [hours, minutes] = lastTimeStr.split(':').map(Number);
-            
-            for (let i = 0; i < 24; i++) {
-                const base = baseDialogs[i % baseDialogs.length];
-                lastId--;
-                
-                minutes -= 15;
-                if (minutes < 0) {
-                    minutes += 60;
-                    hours--;
-                    if (hours < 0) hours += 24;
-                }
-                const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-                
-                dialogs.push({
-                    ...base,
-                    id: lastId,
-                    time: timeStr
-                });
+            // Fetch dialogs from SQLite database via PHP API
+            try {
+                const response = await fetch(`api.php?mode=${currentMode}`);
+                if (!response.ok) throw new Error('API request failed');
+                const data = await response.json();
+                dialogs.length = 0;
+                dialogs.push(...data);
+                console.log('Dialogs loaded from DB:', dialogs);
+            } catch (error) {
+                console.error('Failed to load dialogs from DB, using fallback static data:', error);
+                // Fallback to static dialogs if DB fetch fails
+                dialogs.length = 0;
+                dialogs.push(...c.dialogs);
             }
         }
 
