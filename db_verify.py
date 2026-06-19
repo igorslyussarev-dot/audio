@@ -7,21 +7,19 @@ def verify_db():
     
     # Query utilizing INNER JOIN to verify relations
     cursor.execute('''
-        SELECT d.id, d.mode, d.emp, d.topic, d.script, d.tone, d.lost_profit, t.content
+        SELECT d.id, d.mode, d.emp, d.topic, d.script, d.tone, d.lost_profit, t.speaker, t.text, t.sequence_order
         FROM dialogs d
         INNER JOIN transcripts t ON d.id = t.dialog_id
+        ORDER BY d.id, t.sequence_order
     ''')
     rows = cursor.fetchall()
     
     print(f"--- VERIFICATION ---")
-    print(f"Total rows found (joined): {len(rows)}")
+    print(f"Total rows found (joined transcript lines): {len(rows)}")
     
-    # Print the first 5 records as a sample
-    for row in rows[:5]:
-        # Print sample, cleaning up HTML transcript length for readability
-        transcript_sample = row[7][:60] + "..." if len(row[7]) > 60 else row[7]
-        print(f"ID: {row[0]} | Mode: {row[1]} | Emp: {row[2]} | Topic: {row[3]} | Compliance: {row[4]} | Tone: {row[5]} | Lost profit: {row[6]} KZT")
-        print(f"   -> Transcript sample: {transcript_sample}")
+    # Print a sample of lines
+    for row in rows[:15]:
+        print(f"ID: {row[0]} | Order: {row[9]} | {row[7]}: {row[8]}")
     
     conn.close()
 

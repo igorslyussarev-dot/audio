@@ -1,5 +1,46 @@
 import sqlite3
 import json
+import re
+
+def parse_html_transcript(html_str):
+    # Regex to find paragraphs
+    paragraphs = re.findall(r'<p>(.*?)</p>', html_str)
+    parsed_lines = []
+    
+    for idx, p in enumerate(paragraphs):
+        # 1. Check if it's an action/italic action: <i>(...)</i>
+        action_match = re.search(r'<i>\s*\((.*?)\)\s*</i>|<i>(.*?)</i>', p)
+        if action_match:
+            action_text = action_match.group(1) or action_match.group(2)
+            parsed_lines.append({
+                "speaker": "Действие",
+                "text": action_text.strip(),
+                "order": idx
+            })
+            continue
+            
+        # 2. Check if it's speaker dialogue: <b>Speaker:</b> Text
+        speaker_match = re.search(r'<b>\s*(.*?)\s*:\s*</b>(.*)', p)
+        if speaker_match:
+            speaker = speaker_match.group(1).strip()
+            # Clean text tags (like <i> or <b> if any)
+            text_raw = speaker_match.group(2)
+            clean_text = re.sub(r'<[^>]+>', '', text_raw).strip()
+            parsed_lines.append({
+                "speaker": speaker,
+                "text": clean_text,
+                "order": idx
+            })
+        else:
+            # Fallback: clean all HTML tags
+            clean_text = re.sub(r'<[^>]+>', '', p).strip()
+            parsed_lines.append({
+                "speaker": "Клиент", # default fallback
+                "text": clean_text,
+                "order": idx
+            })
+            
+    return parsed_lines
 
 def setup_db():
     db_file = 'dialogs.db'
@@ -14,7 +55,7 @@ def setup_db():
     cursor.execute("DROP TABLE IF EXISTS transcripts;")
     cursor.execute("DROP TABLE IF EXISTS dialogs;")
 
-    # Create normalized tables without 'review' and 'audit'
+    # Create normalized dialogs table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS dialogs (
             id INTEGER PRIMARY KEY,
@@ -28,16 +69,19 @@ def setup_db():
         )
     ''')
 
+    # Create normalized transcripts table (each line is a separate row without tags)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS transcripts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             dialog_id INTEGER NOT NULL,
-            content TEXT NOT NULL,
+            speaker TEXT NOT NULL,
+            text TEXT NOT NULL,
+            sequence_order INTEGER NOT NULL,
             FOREIGN KEY (dialog_id) REFERENCES dialogs(id) ON DELETE CASCADE
         )
     ''')
 
-    # Dialogs datasets from demo.html (audit and review fields removed)
+    # Dialogs datasets from demo.html
     azs_dialogs = [
         { 
             "id": 4829, 
@@ -163,14 +207,20 @@ def setup_db():
                 d["lost_profit"]
             ))
             
-            # 2. Insert transcript into transcripts table
-            cursor.execute('''
-                INSERT INTO transcripts (dialog_id, content)
-                VALUES (?, ?)
-            ''', (
-                d["id"],
-                d["transcript"]
-            ))
+            # Parse HTML transcript to structured tag-free lines
+            parsed_lines = parse_html_transcript(d["transcript"])
+            
+            # 2. Insert lines into transcripts table
+            for line in parsed_lines:
+                cursor.execute('''
+                    INSERT INTO transcripts (dialog_id, speaker, text, sequence_order)
+                    VALUES (?, ?, ?, ?)
+                ''', (
+                    d["id"],
+                    line["speaker"],
+                    line["text"],
+                    line["order"]
+                ))
 
     insert_records(full_azs, "azs")
     insert_records(full_pharmacy, "pharmacy")

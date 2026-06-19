@@ -1629,8 +1629,8 @@
             }
         }
 
-        function formatTranscript(transcriptText, mode) {
-            if (!transcriptText) {
+        function formatTranscript(transcriptData, mode) {
+            if (!transcriptData) {
                 if (mode === 'azs') {
                     return `
                         <div style="display:flex; flex-direction:column; gap:12px;">
@@ -1660,39 +1660,56 @@
                 }
             }
             
-            const div = document.createElement('div');
-            div.innerHTML = transcriptText;
-            const paragraphs = div.querySelectorAll('p');
-            if (paragraphs.length === 0) {
-                return transcriptText.split('\n').map(line => {
-                    if (!line.trim()) return '';
-                    const isEmp = line.includes('Кассир:') || line.includes('Фармацевт:');
-                    const name = isEmp ? (line.includes('Кассир:') ? 'Кассир' : 'Фармацевт') : 'Клиент';
-                    const text = line.replace(/^(Кассир|Фармацевт|Клиент):\s*/i, '');
-                    return `
-                        <div style="align-self:${isEmp ? 'flex-start' : 'flex-end'}; max-width:85%; background:${isEmp ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${isEmp ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.06)'}; padding:10px 14px; border-radius:${isEmp ? '16px 16px 16px 0px' : '16px 16px 0px 16px'}; color:#fff; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom:8px;">
+            let lines = transcriptData;
+            if (typeof transcriptData === 'string') {
+                try {
+                    lines = JSON.parse(transcriptData);
+                } catch(e) {
+                    // Parse legacy html fallback if it is a raw HTML string
+                    const div = document.createElement('div');
+                    div.innerHTML = transcriptData;
+                    const paragraphs = div.querySelectorAll('p');
+                    let html = '<div style="display:flex; flex-direction:column; gap:12px;">';
+                    paragraphs.forEach(p => {
+                        const bold = p.querySelector('b');
+                        let name = 'Клиент';
+                        if (bold) {
+                            name = bold.innerText.replace(':', '').trim();
+                        }
+                        const text = p.innerHTML.replace(/^<b>.*?<\/b>:\s*/i, '').replace(/<[^>]+>/g, '').trim();
+                        const isEmp = name === 'Кассир' || name === 'Фармацевт';
+                        html += `
+                            <div style="align-self:${isEmp ? 'flex-start' : 'flex-end'}; max-width:85%; background:${isEmp ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${isEmp ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.06)'}; padding:10px 14px; border-radius:${isEmp ? '16px 16px 16px 0px' : '16px 16px 0px 16px'}; color:#fff; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                                <span style="font-size:9px; font-weight:800; color:${isEmp ? '#3B82F6' : '#A0AEC0'}; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; text-align:${isEmp ? 'left' : 'right'};">${name}</span>
+                                <span style="line-height:1.5; font-size:13px;">${text}</span>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    return html;
+                }
+            }
+            
+            let html = '<div style="display:flex; flex-direction:column; gap:12px;">';
+            lines.forEach(line => {
+                const name = line.speaker;
+                const text = line.text;
+                const isEmp = name === 'Кассир' || name === 'Фармацевт';
+                
+                if (name === 'Действие') {
+                    html += `
+                        <div style="align-self:center; font-style:italic; font-size:11px; color:#A0AEC0; opacity:0.8; margin: 4px 0; text-align:center; padding: 4px 12px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid rgba(255,255,255,0.03);">
+                            (${text})
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div style="align-self:${isEmp ? 'flex-start' : 'flex-end'}; max-width:85%; background:${isEmp ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${isEmp ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.06)'}; padding:10px 14px; border-radius:${isEmp ? '16px 16px 16px 0px' : '16px 16px 0px 16px'}; color:#fff; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
                             <span style="font-size:9px; font-weight:800; color:${isEmp ? '#3B82F6' : '#A0AEC0'}; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; text-align:${isEmp ? 'left' : 'right'};">${name}</span>
                             <span style="line-height:1.5; font-size:13px;">${text}</span>
                         </div>
                     `;
-                }).join('');
-            }
-            
-            let html = '<div style="display:flex; flex-direction:column; gap:12px;">';
-            paragraphs.forEach(p => {
-                const bold = p.querySelector('b');
-                let name = 'Клиент';
-                if (bold) {
-                    name = bold.innerText.replace(':', '').trim();
                 }
-                const text = p.innerHTML.replace(/^<b>.*?<\/b>:\s*/i, '').trim();
-                const isEmp = name === 'Кассир' || name === 'Фармацевт';
-                html += `
-                    <div style="align-self:${isEmp ? 'flex-start' : 'flex-end'}; max-width:85%; background:${isEmp ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)'}; border: 1px solid ${isEmp ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.06)'}; padding:10px 14px; border-radius:${isEmp ? '16px 16px 16px 0px' : '16px 16px 0px 16px'}; color:#fff; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-                        <span style="font-size:9px; font-weight:800; color:${isEmp ? '#3B82F6' : '#A0AEC0'}; display:block; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; text-align:${isEmp ? 'left' : 'right'};">${name}</span>
-                        <span style="line-height:1.5; font-size:13px;">${text}</span>
-                    </div>
-                `;
             });
             html += '</div>';
             return html;
