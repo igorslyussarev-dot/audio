@@ -182,7 +182,7 @@ try {
                         
                         <!-- Расшифровка диалога -->
                         <div style="font-weight:800; margin-bottom:12px; font-size: 12px; color:#A0AEC0; text-transform:uppercase; letter-spacing:0.5px;">Расшифровка диалога</div>
-                        <div style="background:rgba(0,0,0,0.2); padding:20px; border-radius:16px; border:1px solid rgba(255,255,255,0.04); max-height: 250px; overflow-y: auto; display:flex; flex-direction:column; gap:12px;">
+                        <div style="background:rgba(0,0,0,0.2); padding:20px; border-radius:16px; border:1px solid rgba(255,255,255,0.04); display:flex; flex-direction:column; gap:12px;">
                             <?php foreach ($transcriptData as $t): 
                                 $isStaff = ($t['speaker'] === 'КАССИР' || $t['speaker'] === 'ФАРМАЦЕВТ');
                             ?>
